@@ -52,22 +52,6 @@
           ];
         };
 
-        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (with pkgs; [
-          glib
-          gtk3
-          libxkbcommon
-          libz
-          pkg-config
-          vulkan-loader
-          wayland
-          wayland-protocols
-          zlib
-          alsa-lib.dev
-          udev.dev
-          udev
-          alsa-lib
-        ]);
-
         cargoArtifacts = craneLib.buildDepsOnly (commonRust
           // {
             # Be warned that using `//` will not do a deep copy of nested sets
