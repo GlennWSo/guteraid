@@ -32,24 +32,23 @@
           ];
         };
 
+        buildInputs = with pkgs; [
+          # Add extra build inputs hxere, etc.
+          openssl
+          alsa-lib
+          libdecor
+          libxkbcommon
+          udev
+          vulkan-loader
+          wayland
+          wayland-protocols
+        ];
         commonRust = {
-          inherit src;
-          buildInputs = with pkgs; [
-            # Add extra build inputs here, etc.
-            openssl
-            alsa-lib
-            libdecor
-            libxkbcommon
-            udev
-            vulkan-loader
-            wayland
-            wayland-protocols
-          ];
+          inherit src buildInputs;
           nativeBuildInputs = with pkgs; [
             # Add extra native build inputs here, etc.
             pkg-config
-            # stdenv.cc
-            # binutils
+            # makeWrapper
           ];
         };
 
@@ -77,6 +76,7 @@
       in rec {
         devShells.default = craneLib.devShell {
           # inherit LD_LIBRARY_PATH;
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
           inputsFrom = [packages.bkad];
           packages = with pkgs; [
             rust-analyzer
@@ -89,9 +89,27 @@
         };
         packages = rec {
           default = bkad;
+          deps = cargoArtifacts;
           bkad = craneLib.buildPackage (commonRust
             // {
               inherit cargoArtifacts;
+              nativeBuildInputs = with pkgs; [
+                # Add extra native build inputs here, etc.
+                pkg-config
+                makeWrapper
+                autoPatchelfHook
+              ];
+
+              # postInstall= ''
+              postInstall = ''
+                # echo "hello world" > $out/hello.txt
+                mkdir $out/lib
+                cp target/release/libbevy_dylib.so $out/lib/
+              '';
+              # postFixup = ''
+              #   wrapProgram $out/bin/guteraid \
+              #     --prefix LD_LIBRARY_PATH : "$out/lib"
+              # '';
             });
         };
       }
