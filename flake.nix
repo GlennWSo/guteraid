@@ -2,9 +2,12 @@
   description = "flake for rust dev";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-26.05";
     crane.url = "github:ipetkov/crane";
-    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -34,19 +37,19 @@
           buildInputs = with pkgs; [
             # Add extra build inputs here, etc.
             openssl
-            alsa-lib.dev
-            udev.dev
-            xorg.libX11.dev
-            xorg.libXcursor.dev
-            xorg.libXi.dev
+            alsa-lib
+            libdecor
+            libxkbcommon
             udev
-
-            clang
-            lld
+            vulkan-loader
+            wayland
+            wayland-protocols
           ];
           nativeBuildInputs = with pkgs; [
             # Add extra native build inputs here, etc.
             pkg-config
+            # stdenv.cc
+            # binutils
           ];
         };
 
@@ -73,7 +76,7 @@
           });
       in rec {
         devShells.default = craneLib.devShell {
-          inherit LD_LIBRARY_PATH;
+          # inherit LD_LIBRARY_PATH;
           inputsFrom = [packages.bkad];
           packages = with pkgs; [
             rust-analyzer
@@ -81,6 +84,7 @@
             cargo-insta
             wf-recorder
             wine64
+            # tdenv.cc
           ];
         };
         packages = rec {
