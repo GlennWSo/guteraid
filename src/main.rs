@@ -1,170 +1,177 @@
-//! Here we use shape primitives to build meshes in a 2D rendering context, making each mesh a certain color by giving that mesh's entity a material based off a [`Color`].
-//!
-//! Meshes are better known for their use in 3D rendering, but we can use them in a 2D context too. Without a third dimension, the meshes we're building are flat – like paper on a table. These are still very useful for "vector-style" graphics, picking behavior, or as a foundation to build off of for where to apply a shader.
-//!
-//! A "shape definition" is not a mesh on its own. A circle can be defined with a radius, i.e. [`Circle::new(50.0)`][Circle::new], but rendering tends to happen with meshes built out of triangles. So we need to turn shape descriptions into meshes.
-//!
-//! Thankfully, we can add shape primitives directly to [`Assets<Mesh>`] because [`Mesh`] implements [`From`] for shape primitives and [`Assets<T>::add`] can be given any value that can be "turned into" `T`!
-//!
-//! We apply a material to the shape by first making a [`Color`] then calling [`Assets<ColorMaterial>::add`] with that color as its argument, which will create a material from that color through the same process [`Assets<Mesh>::add`] can take a shape primitive.
-//!
-//! Both the mesh and material need to be wrapped in their own "newtypes". The mesh and material are currently [`Handle<Mesh>`] and [`Handle<ColorMaterial>`] at the moment, which are not components. Handles are put behind "newtypes" to prevent ambiguity, as some entities might want to have handles to meshes (or images, or materials etc.) for different purposes! All we need to do to make them rendering-relevant components is wrap the mesh handle and the material handle in [`Mesh2d`] and [`MeshMaterial2d`] respectively.
-//!
-//! You can toggle wireframes with the space bar except on wasm. Wasm does not support
-//! `POLYGON_MODE_LINE` on the gpu.
-
-#[cfg(not(target_arch = "wasm32"))]
 use bevy::{
-    input::common_conditions::input_just_pressed,
-    sprite_render::{Wireframe2dConfig, Wireframe2dPlugin},
+    camera::Hdr, color::palettes::css::RED, prelude::*, sprite::Anchor, window::PrimaryWindow,
 };
-use bevy::{input::common_conditions::input_toggle_active, prelude::*};
+use bevy_firefly::{data::NormalMode, prelude::*};
 
 fn main() {
     let mut app = App::new();
-    app.add_plugins((
-        DefaultPlugins,
-        #[cfg(not(target_arch = "wasm32"))]
-        Wireframe2dPlugin::default(),
-    ))
-    .add_systems(Startup, setup);
-    #[cfg(not(target_arch = "wasm32"))]
-    app.add_systems(
-        Update,
-        toggle_wireframe.run_if(input_just_pressed(KeyCode::Space)),
-    );
-    app.add_systems(
-        Update,
-        rotate.run_if(input_toggle_active(false, KeyCode::KeyR)),
-    );
+
+    app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
+    app.add_plugins((FireflyPlugin /*FireflyGizmosPlugin*/,));
+
+    app.init_resource::<Dragged>();
+
+    app.add_systems(Startup, setup);
+    app.add_systems(Update, (z_sorting, drag_objects));
+
     app.run();
 }
 
-const X_EXTENT: f32 = 1000.;
-const Y_EXTENT: f32 = 150.;
-const THICKNESS: f32 = 5.0;
-
-fn setup(
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
-) {
-    commands.spawn(Camera2d);
-
-    let shapes = [
-        meshes.add(Circle::new(50.0)),
-        meshes.add(CircularSector::new(50.0, 1.0)),
-        meshes.add(CircularSegment::new(50.0, 1.25)),
-        meshes.add(Ellipse::new(25.0, 50.0)),
-        meshes.add(Annulus::new(25.0, 50.0)),
-        meshes.add(Capsule2d::new(25.0, 50.0)),
-        meshes.add(Rhombus::new(75.0, 100.0)),
-        meshes.add(Rectangle::new(50.0, 100.0)),
-        meshes.add(RegularPolygon::new(50.0, 6)),
-        meshes.add(Triangle2d::new(
-            Vec2::Y * 50.0,
-            Vec2::new(-50.0, -50.0),
-            Vec2::new(50.0, -50.0),
-        )),
-        meshes.add(Segment2d::new(
-            Vec2::new(-50.0, 50.0),
-            Vec2::new(50.0, -50.0),
-        )),
-        meshes.add(Polyline2d::new(vec![
-            Vec2::new(-50.0, 50.0),
-            Vec2::new(0.0, -50.0),
-            Vec2::new(50.0, 50.0),
-        ])),
-    ];
-    let num_shapes = shapes.len();
-
-    for (i, shape) in shapes.into_iter().enumerate() {
-        // Distribute colors evenly across the rainbow.
-        let color = Color::hsl(360. * i as f32 / num_shapes as f32, 0.95, 0.7);
-
-        commands.spawn((
-            Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
-            Transform::from_xyz(
-                // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
-                -X_EXTENT / 2. + i as f32 / (num_shapes - 1) as f32 * X_EXTENT,
-                Y_EXTENT / 2.,
-                0.0,
-            ),
-        ));
-    }
-
-    let rings = [
-        meshes.add(Circle::new(50.0).to_ring(THICKNESS)),
-        // this visually produces an arc segment but this is not technically accurate
-        meshes.add(Ring::new(
-            CircularSector::new(50.0, 1.0),
-            CircularSector::new(45.0, 1.0),
-        )),
-        meshes.add(CircularSegment::new(50.0, 1.25).to_ring(THICKNESS)),
-        meshes.add({
-            // This is an approximation; Ellipse does not implement Inset as concentric ellipses do not have parallel curves
-            let outer = Ellipse::new(25.0, 50.0);
-            let mut inner = outer;
-            inner.half_size -= Vec2::splat(THICKNESS);
-            Ring::new(outer, inner)
-        }),
-        // this is equivalent to the Annulus::new(25.0, 50.0) above
-        meshes.add(Ring::new(Circle::new(50.0), Circle::new(25.0))),
-        meshes.add(Capsule2d::new(25.0, 50.0).to_ring(THICKNESS)),
-        meshes.add(Rhombus::new(75.0, 100.0).to_ring(THICKNESS)),
-        meshes.add(Rectangle::new(50.0, 100.0).to_ring(THICKNESS)),
-        meshes.add(RegularPolygon::new(50.0, 6).to_ring(THICKNESS)),
-        meshes.add(
-            Triangle2d::new(
-                Vec2::Y * 50.0,
-                Vec2::new(-50.0, -50.0),
-                Vec2::new(50.0, -50.0),
-            )
-            .to_ring(THICKNESS),
-        ),
-    ];
-    // Allow for 2 empty spaces
-    let num_rings = rings.len() + 2;
-
-    for (i, shape) in rings.into_iter().enumerate() {
-        // Distribute colors evenly across the rainbow.
-        let color = Color::hsl(360. * i as f32 / num_rings as f32, 0.95, 0.7);
-
-        commands.spawn((
-            Mesh2d(shape),
-            MeshMaterial2d(materials.add(color)),
-            Transform::from_xyz(
-                // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
-                -X_EXTENT / 2. + i as f32 / (num_rings - 1) as f32 * X_EXTENT,
-                -Y_EXTENT / 2.,
-                0.0,
-            ),
-        ));
-    }
-
-    let mut text = "Press 'R' to pause/resume rotation".to_string();
-    #[cfg(not(target_arch = "wasm32"))]
-    text.push_str("\nPress 'Space' to toggle wireframes");
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let mut proj = OrthographicProjection::default_2d();
+    proj.scale = 0.15;
 
     commands.spawn((
-        Text::new(text),
-        Node {
-            position_type: PositionType::Absolute,
-            top: px(12),
-            left: px(12),
+        Camera2d,
+        Hdr,
+        Projection::Orthographic(proj),
+        FireflyConfig {
+            // normal maps need to be explicitly enabled
+            normal_mode: NormalMode::TopDownY,
+            enable_32bit_stencils: true,
             ..default()
         },
     ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("crate.png")),
+        Anchor(vec2(0.0, -0.5 + 3.0 / 18.0)),
+        NormalMap::from_file("crate_normal.png", &asset_server),
+        Transform::from_translation(vec3(0., -20., 20.)),
+        Occluder2d::rectangle(12., 5.1),
+        // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
+        // this can safely not be added, and it defaults to 0.
+        SpriteHeight(0.),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("hero.png")),
+        Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
+        // NormalMap::from_file("crate_normal.png", &asset_server),
+        Transform::from_translation(vec3(0., -20., 20.)),
+        Occluder2d::round_rectangle(5.4, 0.5, 3.),
+        // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
+        // this can safely not be added, and it defaults to 0.
+        // SpriteHeight(0.),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("crate.png")),
+        Anchor(vec2(0.0, -0.5 + 3.0 / 18.0)),
+        NormalMap::from_file("crate_normal.png", &asset_server),
+        Transform::from_translation(vec3(-20., 20., 0.)),
+        Occluder2d::rectangle(12., 5.1),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("vase.png")),
+        Anchor(vec2(0.0, -0.5 + 5.0 / 19.0)),
+        NormalMap::from_file("vase_normal.png", &asset_server),
+        Transform::from_translation(vec3(0., 20., 0.)),
+        Occluder2d::round_rectangle(5.4, 0.5, 3.),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("vase.png")),
+        Anchor(vec2(0.0, -0.5 + 5.0 / 19.0)),
+        NormalMap::from_file("vase_normal.png", &asset_server),
+        Transform::from_translation(vec3(10., -20., 0.)),
+        Occluder2d::round_rectangle(5.4, 0.5, 3.),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("bonfire.png")),
+        PointLight2d {
+            intensity: 3.,
+            radius: 100.,
+            core: LightCore {
+                radius: 20.0,
+                ..default()
+            },
+            color: Color::srgb(1.0, 0.8, 0.6),
+            ..default()
+        },
+        // component added to simulate height for the normal maps.
+        // you can see the lamp lighting up the top of the sprites because it has a greater height than the bonfire.
+        LightHeight(3.),
+    ));
+
+    commands.spawn((
+        Sprite::from_image(asset_server.load("lamp.png")),
+        Anchor(vec2(0.0, -0.5 + 5.0 / 32.0)),
+        Transform::from_translation(vec3(20., 0., 0.)),
+        PointLight2d {
+            intensity: 5.,
+            radius: 100.,
+            core: LightCore {
+                radius: 20.0,
+                ..default()
+            },
+            color: Color::srgb(0.8, 0.8, 1.0),
+            ..default()
+        },
+        LightHeight(22.),
+    ));
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-fn toggle_wireframe(mut wireframe_config: ResMut<Wireframe2dConfig>) {
-    wireframe_config.global = !wireframe_config.global;
+// setting the sprite's z in relation to their y, so that Bevy's sprite renderer and firefly sort them properly.
+fn z_sorting(mut sprites: Query<&mut Transform, With<Sprite>>) {
+    for mut transform in &mut sprites {
+        transform.translation.z = -transform.translation.y;
+    }
 }
 
-fn rotate(mut query: Query<&mut Transform, With<Mesh2d>>, time: Res<Time>) {
-    for mut transform in &mut query {
-        transform.rotate_z(time.delta_secs() / 2.0);
+#[derive(Resource, Default)]
+struct Dragged(pub Option<Entity>);
+
+fn drag_objects(
+    mut objects: Query<(Entity, &mut Transform), With<Sprite>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    mut dragged: ResMut<Dragged>,
+    mut gizmos: Gizmos,
+) {
+    let Some(cursor_position) = window
+        .cursor_position()
+        .and_then(|cursor| camera.0.viewport_to_world_2d(&camera.1, cursor).ok())
+    else {
+        dragged.0 = None;
+        return;
+    };
+
+    if buttons.pressed(MouseButton::Left)
+        && let Some(dragged) = dragged.0
+        && let Ok((_, mut transform)) = objects.get_mut(dragged)
+    {
+        transform.translation.x = cursor_position.x;
+        transform.translation.y = cursor_position.y;
+        gizmos.circle_2d(
+            Isometry2d::from_translation(transform.translation.xy()),
+            3.,
+            RED,
+        );
+        return;
+    }
+
+    if let Some((hovered, transform)) = objects.iter().min_by(|(_, a), (_, b)| {
+        a.translation
+            .xy()
+            .distance(cursor_position)
+            .total_cmp(&b.translation.xy().distance(cursor_position))
+    }) && transform.translation.xy().distance(cursor_position) < 4.
+    {
+        gizmos.circle_2d(
+            Isometry2d::from_translation(transform.translation.xy()),
+            3.,
+            RED,
+        );
+        if buttons.just_pressed(MouseButton::Left) {
+            dragged.0 = Some(hovered);
+        }
+    }
+
+    if !buttons.pressed(MouseButton::Left) {
+        dragged.0 = None;
     }
 }

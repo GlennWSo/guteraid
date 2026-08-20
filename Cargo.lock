@@ -811,6 +811,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_firefly"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee5f48d593b364d5f55e7b29af124b02e587d16e2ddfc1de5b63a0d80c255223"
+dependencies = [
+ "bevy",
+ "bitflags 2.13.1",
+ "bytemuck",
+ "fixedbitset",
+ "indexmap",
+]
+
+[[package]]
 name = "bevy_gilrs"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2853,6 +2866,7 @@ name = "guteraid"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_firefly",
 ]
 
 [[package]]
