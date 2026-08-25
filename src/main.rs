@@ -1,7 +1,20 @@
 use bevy::{
-    camera::Hdr, color::palettes::css::RED, prelude::*, sprite::Anchor, window::PrimaryWindow,
+    camera::Hdr, color::palettes::css::RED, ecs::query::QuerySingleError, prelude::*,
+    sprite::Anchor, window::PrimaryWindow,
 };
 use bevy_firefly::{data::NormalMode, prelude::*};
+
+#[derive(Component)]
+struct Player;
+
+#[derive(Component, Debug, Copy, Clone, Deref, DerefMut)]
+struct MoveSpeed(f32);
+
+impl Default for MoveSpeed {
+    fn default() -> Self {
+        Self(20.0)
+    }
+}
 
 fn main() {
     let mut app = App::new();
@@ -11,8 +24,8 @@ fn main() {
 
     app.init_resource::<Dragged>();
 
-    app.add_systems(Startup, setup);
-    app.add_systems(Update, (z_sorting, drag_objects));
+    app.add_systems(Startup, (setup, spawn_player));
+    app.add_systems(Update, (z_sorting, drag_objects, player_movement));
 
     app.run();
 }
@@ -42,17 +55,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
         // this can safely not be added, and it defaults to 0.
         SpriteHeight(0.),
-    ));
-
-    commands.spawn((
-        Sprite::from_image(asset_server.load("hero.png")),
-        Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
-        // NormalMap::from_file("crate_normal.png", &asset_server),
-        Transform::from_translation(vec3(0., -20., 20.)),
-        Occluder2d::round_rectangle(5.4, 0.5, 3.),
-        // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
-        // this can safely not be added, and it defaults to 0.
-        // SpriteHeight(0.),
     ));
 
     commands.spawn((
@@ -111,6 +113,21 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
             ..default()
         },
         LightHeight(22.),
+    ));
+}
+
+fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Sprite::from_image(asset_server.load("hero.png")),
+        Player,
+        MoveSpeed(50.0),
+        Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
+        // NormalMap::from_file("crate_normal.png", &asset_server),
+        Transform::from_translation(vec3(0., -20., 20.)),
+        Occluder2d::round_rectangle(5.4, 0.5, 3.),
+        // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
+        // this can safely not be added, and it defaults to 0.
+        // SpriteHeight(0.),
     ));
 }
 
@@ -174,4 +191,34 @@ fn drag_objects(
     if !buttons.pressed(MouseButton::Left) {
         dragged.0 = None;
     }
+}
+
+fn player_movement(
+    time: Res<Time>,
+    // mut query: Query<(&mut Transform, &MoveSpeed), With<Player>>,
+    player: Single<(&mut Transform, &MoveSpeed), With<Player>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+) {
+    let (mut transform, MoveSpeed(speed)) = player.into_inner();
+
+    let mut direction = Vec3::ZERO;
+
+    if keyboard_input.pressed(KeyCode::KeyW) {
+        direction.y += 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::KeyS) {
+        direction.y -= 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::KeyA) {
+        direction.x -= 1.0;
+    }
+    if keyboard_input.pressed(KeyCode::KeyD) {
+        direction.x += 1.0;
+    }
+
+    if direction.length_squared() > 0.0 {
+        direction = direction.normalize();
+    }
+
+    transform.translation += direction * speed * time.delta_secs();
 }
