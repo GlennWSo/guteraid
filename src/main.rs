@@ -1,13 +1,23 @@
 use bevy::{
-    camera::Hdr, color::palettes::css::RED, ecs::query::QuerySingleError, prelude::*,
-    sprite::Anchor, window::PrimaryWindow,
+    camera::{CameraOutputMode, Hdr, visibility::RenderLayers},
+    color::palettes::css::RED,
+    ecs::query::QuerySingleError,
+    prelude::*,
+    render::render_resource::BlendState,
+    sprite::Anchor,
+    window::PrimaryWindow,
 };
 use bevy_firefly::{data::NormalMode, prelude::*};
+use bevy_inspector_egui::{
+    bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext},
+    quick::WorldInspectorPlugin,
+};
 
 #[derive(Component)]
 struct Player;
 
-#[derive(Component, Debug, Copy, Clone, Deref, DerefMut)]
+#[derive(Component, Debug, Copy, Clone, Deref, DerefMut, Reflect)]
+// #[reflect(Component)]
 struct MoveSpeed(f32);
 
 impl Default for MoveSpeed {
@@ -20,21 +30,31 @@ fn main() {
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
-    app.add_plugins((FireflyPlugin /*FireflyGizmosPlugin*/,));
+    app.add_plugins((
+        FireflyPlugin, /*FireflyGizmosPlugin*/
+        EguiPlugin::default(),
+        WorldInspectorPlugin::new(),
+    ));
+    app.register_type::<MoveSpeed>();
 
     app.init_resource::<Dragged>();
 
-    app.add_systems(Startup, (setup, spawn_player));
+    app.add_systems(Startup, (setup_cameras, setup, spawn_player));
     app.add_systems(Update, (z_sorting, drag_objects, player_movement));
 
     app.run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+const UI_RENDER_LAYER: usize = 10;
+fn setup_cameras(mut commands: Commands, mut egui_global_settings: ResMut<EguiGlobalSettings>) {
+    // Disable the automatic creation of a primary context to set it up manually for every camera.
+    egui_global_settings.auto_create_primary_context = false;
+
     let mut proj = OrthographicProjection::default_2d();
     proj.scale = 0.15;
 
     commands.spawn((
+        Name::new("World Camera"),
         Camera2d,
         Hdr,
         Projection::Orthographic(proj),
@@ -47,6 +67,24 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 
     commands.spawn((
+        Name::new("UI Camera"),
+        Camera2d,
+        PrimaryEguiContext,
+        RenderLayers::layer(UI_RENDER_LAYER),
+        Camera {
+            order: 10,
+            clear_color: ClearColorConfig::Custom(Color::NONE),
+            output_mode: CameraOutputMode::Write {
+                blend_state: Some(BlendState::ALPHA_BLENDING),
+                clear_color: ClearColorConfig::Custom(Color::NONE),
+            },
+            ..Default::default()
+        },
+    ));
+}
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    commands.spawn((
+        Name::new("Crate"),
         Sprite::from_image(asset_server.load("crate.png")),
         Anchor(vec2(0.0, -0.5 + 3.0 / 18.0)),
         NormalMap::from_file("crate_normal.png", &asset_server),
@@ -58,6 +96,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 
     commands.spawn((
+        Name::new("Crate"),
         Sprite::from_image(asset_server.load("crate.png")),
         Anchor(vec2(0.0, -0.5 + 3.0 / 18.0)),
         NormalMap::from_file("crate_normal.png", &asset_server),
@@ -71,6 +110,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         NormalMap::from_file("vase_normal.png", &asset_server),
         Transform::from_translation(vec3(0., 20., 0.)),
         Occluder2d::round_rectangle(5.4, 0.5, 3.),
+        Name::new("Vase"),
     ));
 
     commands.spawn((
@@ -79,9 +119,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         NormalMap::from_file("vase_normal.png", &asset_server),
         Transform::from_translation(vec3(10., -20., 0.)),
         Occluder2d::round_rectangle(5.4, 0.5, 3.),
+        Name::new("Vase"),
     ));
 
     commands.spawn((
+        Name::new("Bonfire"),
         Sprite::from_image(asset_server.load("bonfire.png")),
         PointLight2d {
             intensity: 3.,
@@ -99,6 +141,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 
     commands.spawn((
+        Name::new("Street Lamp"),
         Sprite::from_image(asset_server.load("lamp.png")),
         Anchor(vec2(0.0, -0.5 + 5.0 / 32.0)),
         Transform::from_translation(vec3(20., 0., 0.)),
@@ -118,6 +161,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
 
 fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
+        Name::new("Player"),
         Sprite::from_image(asset_server.load("hero.png")),
         Player,
         MoveSpeed(50.0),
