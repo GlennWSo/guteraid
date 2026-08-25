@@ -68,7 +68,7 @@
             cargo-insta
             wf-recorder
             wine64
-            # tdenv.cc
+            pinta
           ];
         };
         packages = rec {
