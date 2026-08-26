@@ -13,6 +13,8 @@ use bevy_inspector_egui::{
     bevy_egui::{EguiGlobalSettings, EguiPlugin, PrimaryEguiContext},
     quick::WorldInspectorPlugin,
 };
+use bevy_prng::{ChaCha8Rng, WyRand};
+use bevy_rand::{global::GlobalRng, plugin::EntropyPlugin};
 
 #[derive(Component)]
 struct Player;
@@ -86,10 +88,14 @@ fn main() {
     let mut app = App::new();
 
     app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
+
+    let seed: u64 = 67;
+    let entropy_plugin = EntropyPlugin::<WyRand>::with_seed(seed.to_ne_bytes());
     app.add_plugins((
         FireflyPlugin, /*FireflyGizmosPlugin*/
         EguiPlugin::default(),
         WorldInspectorPlugin::new(),
+        // entropy_plugin,
     ));
     app.register_type::<MoveSpeed>();
     app.register_type::<HeroAnimation>();
@@ -101,11 +107,12 @@ fn main() {
     app.add_systems(
         Startup,
         (
-            setup_world_camera,
             setup_ui_camera,
+            setup_world_camera,
             spawn_scene,
             spawn_player,
-        ),
+        )
+            .chain(),
     );
     app.add_systems(
         Update,
@@ -331,6 +338,7 @@ fn drag_objects(
 fn animate_player(
     time: Res<Time>,
     player: Single<(&mut Sprite, &HeroAnimation, &HeroAnimationRates), With<Player>>,
+    // mut rng: Single<&mut ChaCha8Rng, With<GlobalRng>>,
 ) {
     let (mut sprite, animation, rates) = player.into_inner();
     let Some(ref mut atlas) = sprite.texture_atlas else {
