@@ -1,7 +1,6 @@
 use bevy::{
     camera::{CameraOutputMode, Hdr, visibility::RenderLayers},
     color::palettes::css::RED,
-    ecs::query::QuerySingleError,
     prelude::*,
     render::render_resource::BlendState,
     sprite::Anchor,
@@ -18,11 +17,31 @@ struct Player;
 
 #[derive(Component, Debug, Copy, Clone, Deref, DerefMut, Reflect)]
 // #[reflect(Component)]
-struct MoveSpeed(f32);
+pub struct MoveSpeed(pub f32);
 
 impl Default for MoveSpeed {
     fn default() -> Self {
         Self(20.0)
+    }
+}
+
+#[derive(Resource)]
+struct PlayerIdleSheet(Handle<TextureAtlasLayout>);
+
+impl PlayerIdleSheet {
+    fn clone_inner(&self) -> Handle<TextureAtlasLayout> {
+        self.0.clone()
+    }
+}
+
+impl FromWorld for PlayerIdleSheet {
+    fn from_world(world: &mut World) -> Self {
+        let player_atlas = TextureAtlasLayout::from_grid((48, 64).into(), 8, 6, None, None);
+        let mut texture_atlases = world
+            .get_resource_mut::<Assets<TextureAtlasLayout>>()
+            .unwrap();
+        let texture_atlas_handle = texture_atlases.add(player_atlas);
+        Self(texture_atlas_handle)
     }
 }
 
@@ -38,6 +57,7 @@ fn main() {
     app.register_type::<MoveSpeed>();
 
     app.init_resource::<Dragged>();
+    // app.init_resource::<PlayerIdleSheet>();
 
     app.add_systems(Startup, (setup_cameras, setup, spawn_player));
     app.add_systems(Update, (z_sorting, drag_objects, player_movement));
