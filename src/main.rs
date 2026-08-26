@@ -57,16 +57,26 @@ fn main() {
     app.register_type::<MoveSpeed>();
 
     app.init_resource::<Dragged>();
-    // app.init_resource::<PlayerIdleSheet>();
+    app.init_resource::<PlayerIdleSheet>();
 
-    app.add_systems(Startup, (setup_cameras, setup, spawn_player));
+    app.add_systems(
+        Startup,
+        (
+            setup_world_camera,
+            setup_ui_camera,
+            spawn_scene,
+            spawn_player,
+        ),
+    );
     app.add_systems(Update, (z_sorting, drag_objects, player_movement));
 
     app.run();
 }
 
-const UI_RENDER_LAYER: usize = 10;
-fn setup_cameras(mut commands: Commands, mut egui_global_settings: ResMut<EguiGlobalSettings>) {
+fn setup_world_camera(
+    mut commands: Commands,
+    mut egui_global_settings: ResMut<EguiGlobalSettings>,
+) {
     // Disable the automatic creation of a primary context to set it up manually for every camera.
     egui_global_settings.auto_create_primary_context = false;
 
@@ -85,7 +95,10 @@ fn setup_cameras(mut commands: Commands, mut egui_global_settings: ResMut<EguiGl
             ..default()
         },
     ));
+}
 
+const UI_RENDER_LAYER: usize = 10;
+fn setup_ui_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("UI Camera"),
         Camera2d,
@@ -102,7 +115,7 @@ fn setup_cameras(mut commands: Commands, mut egui_global_settings: ResMut<EguiGl
         },
     ));
 }
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Name::new("Crate"),
         Sprite::from_image(asset_server.load("crate.png")),
