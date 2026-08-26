@@ -1,6 +1,7 @@
 use bevy::{
     camera::{CameraOutputMode, Hdr, visibility::RenderLayers},
     color::palettes::css::RED,
+    ecs::query::QuerySingleError,
     prelude::*,
     render::render_resource::BlendState,
     sprite::Anchor,
@@ -17,31 +18,11 @@ struct Player;
 
 #[derive(Component, Debug, Copy, Clone, Deref, DerefMut, Reflect)]
 // #[reflect(Component)]
-pub struct MoveSpeed(pub f32);
+struct MoveSpeed(f32);
 
 impl Default for MoveSpeed {
     fn default() -> Self {
         Self(20.0)
-    }
-}
-
-#[derive(Resource)]
-struct PlayerIdleSheet(Handle<TextureAtlasLayout>);
-
-impl PlayerIdleSheet {
-    fn clone_inner(&self) -> Handle<TextureAtlasLayout> {
-        self.0.clone()
-    }
-}
-
-impl FromWorld for PlayerIdleSheet {
-    fn from_world(world: &mut World) -> Self {
-        let player_atlas = TextureAtlasLayout::from_grid((48, 64).into(), 8, 6, None, None);
-        let mut texture_atlases = world
-            .get_resource_mut::<Assets<TextureAtlasLayout>>()
-            .unwrap();
-        let texture_atlas_handle = texture_atlases.add(player_atlas);
-        Self(texture_atlas_handle)
     }
 }
 
@@ -57,7 +38,6 @@ fn main() {
     app.register_type::<MoveSpeed>();
 
     app.init_resource::<Dragged>();
-    app.init_resource::<PlayerIdleSheet>();
 
     app.add_systems(Startup, (setup_cameras, setup, spawn_player));
     app.add_systems(Update, (z_sorting, drag_objects, player_movement));
@@ -179,25 +159,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn spawn_player(
-    mut commands: Commands,
-    idle_atlas: Res<PlayerIdleSheet>,
-    asset_server: Res<AssetServer>,
-) {
-    let image: Handle<Image> = asset_server.load("hero/Idle/Idle.png");
-    // Sprite::from_image(asset_server.load("hero.png")),
-    let sprite = Sprite {
-        image,
-        texture_atlas: Some(TextureAtlas {
-            layout: idle_atlas.clone_inner(),
-            ..default()
-        }),
-        ..Default::default()
-    };
+fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn((
         Name::new("Player"),
+        Sprite::from_image(asset_server.load("hero.png")),
         Player,
-        sprite,
         MoveSpeed(50.0),
         Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
         // NormalMap::from_file("crate_normal.png", &asset_server),
