@@ -192,11 +192,25 @@ fn spawn_scene(mut commands: Commands, asset_server: Res<AssetServer>) {
     ));
 }
 
-fn spawn_player(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_player(
+    mut commands: Commands,
+    idle_atlas: Res<PlayerIdleSheet>,
+    asset_server: Res<AssetServer>,
+) {
+    let image: Handle<Image> = asset_server.load("hero/Idle/Idle.png");
+    // Sprite::from_image(asset_server.load("hero.png")),
+    let sprite = Sprite {
+        image,
+        texture_atlas: Some(TextureAtlas {
+            layout: idle_atlas.clone_inner(),
+            ..default()
+        }),
+        ..Default::default()
+    };
     commands.spawn((
         Name::new("Player"),
-        Sprite::from_image(asset_server.load("hero.png")),
         Player,
+        sprite,
         MoveSpeed(50.0),
         Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
         // NormalMap::from_file("crate_normal.png", &asset_server),
