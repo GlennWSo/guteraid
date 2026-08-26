@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use bevy::{
     camera::{CameraOutputMode, Hdr, visibility::RenderLayers},
     color::palettes::css::RED,
@@ -14,6 +16,38 @@ use bevy_inspector_egui::{
 
 #[derive(Component)]
 struct Player;
+
+#[derive(Component, Reflect)]
+struct HeroAnimationRates {
+    /// pause time in the animation
+    idle_no_animation_frames: u32,
+    idle_rate: u32,
+    attack: u32,
+    moving: u32,
+}
+
+impl Default for HeroAnimationRates {
+    fn default() -> Self {
+        Self {
+            idle_rate: 1000 / 40,
+            attack: 1000 / 40,
+            moving: 1000 / 40,
+            idle_no_animation_frames: 0,
+        }
+    }
+}
+
+#[derive(Component, Default, Reflect)]
+enum HeroAnimation {
+    #[default]
+    Idle,
+    Attack {
+        start: Instant,
+    },
+    Moving {
+        haste_level: u8,
+    },
+}
 
 #[derive(Component, Debug, Copy, Clone, Deref, DerefMut, Reflect)]
 // #[reflect(Component)]
@@ -32,11 +66,14 @@ impl PlayerIdleSheet {
     fn clone_inner(&self) -> Handle<TextureAtlasLayout> {
         self.0.clone()
     }
+    const ROWS: u32 = 6;
+    const COLUMNS: u32 = 8;
 }
 
 impl FromWorld for PlayerIdleSheet {
     fn from_world(world: &mut World) -> Self {
-        let player_atlas = TextureAtlasLayout::from_grid((48, 64).into(), 8, 6, None, None);
+        let player_atlas =
+            TextureAtlasLayout::from_grid((48, 64).into(), Self::COLUMNS, Self::ROWS, None, None);
         let mut texture_atlases = world
             .get_resource_mut::<Assets<TextureAtlasLayout>>()
             .unwrap();
@@ -55,6 +92,8 @@ fn main() {
         WorldInspectorPlugin::new(),
     ));
     app.register_type::<MoveSpeed>();
+    app.register_type::<HeroAnimation>();
+    app.register_type::<HeroAnimationRates>();
 
     app.init_resource::<Dragged>();
     app.init_resource::<PlayerIdleSheet>();
@@ -68,7 +107,10 @@ fn main() {
             spawn_player,
         ),
     );
-    app.add_systems(Update, (z_sorting, drag_objects, player_movement));
+    app.add_systems(
+        Update,
+        (z_sorting, drag_objects, player_movement, animate_player),
+    );
 
     app.run();
 }
@@ -210,6 +252,8 @@ fn spawn_player(
     commands.spawn((
         Name::new("Player"),
         Player,
+        HeroAnimation::Idle,
+        HeroAnimationRates::default(),
         sprite,
         MoveSpeed(50.0),
         Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
@@ -281,6 +325,31 @@ fn drag_objects(
 
     if !buttons.pressed(MouseButton::Left) {
         dragged.0 = None;
+    }
+}
+
+fn animate_player(
+    time: Res<Time>,
+    player: Single<(&mut Sprite, &HeroAnimation, &HeroAnimationRates), With<Player>>,
+) {
+    let (mut sprite, animation, rates) = player.into_inner();
+    let Some(ref mut atlas) = sprite.texture_atlas else {
+        return;
+    };
+    match animation {
+        HeroAnimation::Idle => {
+            let current_time = time.elapsed().as_millis() as u32;
+            let frame_number = current_time / rates.idle_rate;
+            let n_idle_frames = PlayerIdleSheet::COLUMNS + rates.idle_no_animation_frames;
+            let psudo_frame = frame_number % n_idle_frames;
+            let animation_frame = psudo_frame.min(PlayerIdleSheet::COLUMNS - 1);
+            // let idle_time_version =
+            //     (frame_number % n_idle_frames).max((PlayerIdleSheet::COLUMNS - 1);
+
+            atlas.index = animation_frame as usize;
+        }
+        HeroAnimation::Attack { start } => println!("not impl"),
+        HeroAnimation::Moving { haste_level } => println!("not impl"),
     }
 }
 
