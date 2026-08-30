@@ -3148,6 +3148,7 @@ dependencies = [
  "bevy_firefly",
  "bevy_prng",
  "bevy_rand",
+ "rand",
  "rand_core",
 ]
 

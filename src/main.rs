@@ -15,37 +15,59 @@ use bevy_inspector_egui::{
 };
 use bevy_prng::{ChaCha8Rng, WyRand};
 use bevy_rand::{global::GlobalRng, plugin::EntropyPlugin};
+use rand::RngExt;
+use rand_core::Rng;
 
 #[derive(Component)]
 struct Player;
 
 #[derive(Component, Reflect)]
-struct HeroAnimationRates {
-    /// pause time in the animation
-    idle_no_animation_frames: u32,
-    idle_rate: u32,
-    attack: u32,
-    moving: u32,
+struct HeroAnimationSettings {
+    /// animation speed, time ms per frame
+    idle_shrug_speed: u32,
+    /// probability of animation during idle, promille
+    idle_animation_prob: u32,
+    /// duration of no animation
+    idle_nothing_duration: u32,
+    /// animation speed, time ms per frame
+    attack_speed: u32,
+    /// animation speed, time ms per frame
+    moving_speed: u32,
 }
 
-impl Default for HeroAnimationRates {
+impl Default for HeroAnimationSettings {
     fn default() -> Self {
         Self {
-            idle_rate: 1000 / 40,
-            attack: 1000 / 40,
-            moving: 1000 / 40,
-            idle_no_animation_frames: 0,
+            idle_shrug_speed: 100,
+            attack_speed: 100,
+            moving_speed: 100,
+            idle_nothing_duration: 400,
+            idle_animation_prob: 400,
         }
+    }
+}
+
+#[derive(Component, Reflect)]
+struct AnimationStart(Instant);
+
+impl Default for AnimationStart {
+    fn default() -> Self {
+        Self(Instant::now())
+    }
+}
+
+impl From<Instant> for AnimationStart {
+    fn from(time: Instant) -> Self {
+        Self(time)
     }
 }
 
 #[derive(Component, Default, Reflect)]
 enum HeroAnimation {
     #[default]
-    Idle,
-    Attack {
-        start: Instant,
-    },
+    IdleShrug,
+    IdleNothing,
+    Attack,
     Moving {
         haste_level: u8,
     },
@@ -95,11 +117,12 @@ fn main() {
         FireflyPlugin, /*FireflyGizmosPlugin*/
         EguiPlugin::default(),
         WorldInspectorPlugin::new(),
-        // entropy_plugin,
+        entropy_plugin,
     ));
     app.register_type::<MoveSpeed>();
     app.register_type::<HeroAnimation>();
-    app.register_type::<HeroAnimationRates>();
+    app.register_type::<HeroAnimationSettings>();
+    app.register_type::<AnimationStart>();
 
     app.init_resource::<Dragged>();
     app.init_resource::<PlayerIdleSheet>();
@@ -259,8 +282,9 @@ fn spawn_player(
     commands.spawn((
         Name::new("Player"),
         Player,
-        HeroAnimation::Idle,
-        HeroAnimationRates::default(),
+        HeroAnimation::IdleShrug,
+        AnimationStart::default(),
+        HeroAnimationSettings::default(),
         sprite,
         MoveSpeed(50.0),
         Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
@@ -336,28 +360,54 @@ fn drag_objects(
 }
 
 fn animate_player(
-    time: Res<Time>,
-    player: Single<(&mut Sprite, &HeroAnimation, &HeroAnimationRates), With<Player>>,
-    // mut rng: Single<&mut ChaCha8Rng, With<GlobalRng>>,
+    player: Single<
+        (
+            &mut Sprite,
+            &mut HeroAnimation,
+            &mut HeroAnimationSettings,
+            &mut AnimationStart,
+        ),
+        With<Player>,
+    >,
+    mut rng: Single<&mut WyRand, With<GlobalRng>>,
 ) {
-    let (mut sprite, animation, rates) = player.into_inner();
+    let (mut sprite, mut animation, settings, mut start) = player.into_inner();
     let Some(ref mut atlas) = sprite.texture_atlas else {
         return;
     };
-    match animation {
-        HeroAnimation::Idle => {
-            let current_time = time.elapsed().as_millis() as u32;
-            let frame_number = current_time / rates.idle_rate;
-            let n_idle_frames = PlayerIdleSheet::COLUMNS + rates.idle_no_animation_frames;
-            let psudo_frame = frame_number % n_idle_frames;
-            let animation_frame = psudo_frame.min(PlayerIdleSheet::COLUMNS - 1);
-            // let idle_time_version =
-            //     (frame_number % n_idle_frames).max((PlayerIdleSheet::COLUMNS - 1);
+    let etime = start.0.elapsed().as_millis() as u32;
+    match *animation {
+        HeroAnimation::IdleShrug => {
+            let n_idle_frames = PlayerIdleSheet::COLUMNS;
+            let frame_number = etime / settings.idle_shrug_speed;
 
-            atlas.index = animation_frame as usize;
+            if frame_number >= n_idle_frames {
+                *start = Instant::now().into();
+                let shrug = rng.random_ratio(settings.idle_animation_prob.min(1000), 1000);
+                if shrug {
+                    *animation = HeroAnimation::IdleShrug;
+                } else {
+                    *animation = HeroAnimation::IdleNothing
+                }
+            } else {
+                atlas.index = frame_number as usize;
+            }
         }
-        HeroAnimation::Attack { start } => println!("not impl"),
-        HeroAnimation::Moving { haste_level } => println!("not impl"),
+        HeroAnimation::Attack => todo!(),
+        HeroAnimation::Moving { haste_level } => todo!(),
+        HeroAnimation::IdleNothing => {
+            let time_up = etime > settings.idle_nothing_duration;
+
+            if time_up {
+                *start = Instant::now().into();
+                let shrug = rng.random_ratio(settings.idle_animation_prob.min(1000), 1000);
+                if shrug {
+                    *animation = HeroAnimation::IdleShrug;
+                } else {
+                    *animation = HeroAnimation::IdleNothing
+                }
+            }
+        }
     }
 }
 

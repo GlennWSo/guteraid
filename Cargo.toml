@@ -10,6 +10,7 @@ bevy_firefly = "0.19.0"
 rand_core = "0.10"
 bevy_rand = "0.15"
 bevy_prng = { version = "0.15", features = ["chacha20", "wyrand"] }
+rand = { version = "0.10.2", default-features = false }
 
 # Enable a small amount of optimization in the dev profile.
 [profile.dev]
