@@ -145,6 +145,8 @@ fn main() {
     app.run();
 }
 
+#[derive(Component)]
+struct WorldCamera;
 fn setup_world_camera(
     mut commands: Commands,
     mut egui_global_settings: ResMut<EguiGlobalSettings>,
@@ -159,6 +161,7 @@ fn setup_world_camera(
         Name::new("World Camera"),
         Camera2d,
         Hdr,
+        WorldCamera,
         Projection::Orthographic(proj),
         FireflyConfig {
             // normal maps need to be explicitly enabled
@@ -287,13 +290,13 @@ fn spawn_player(
         HeroAnimationSettings::default(),
         sprite,
         MoveSpeed(50.0),
-        Anchor(vec2(-0.03, -0.45 + 3.0 / 18.0)),
+        Anchor(vec2(0.0, -0.18)),
         // NormalMap::from_file("crate_normal.png", &asset_server),
         Transform::from_translation(vec3(0., -20., 20.)),
-        Occluder2d::round_rectangle(5.4, 0.5, 3.),
+        Occluder2d::round_rectangle(7.0, 0.5, 2.),
         // component added to simulate height for the normal maps. Could be useful if the object is floating above the ground.
         // this can safely not be added, and it defaults to 0.
-        // SpriteHeight(0.),
+        SpriteHeight(0.),
     ));
 }
 
@@ -310,7 +313,7 @@ struct Dragged(pub Option<Entity>);
 fn drag_objects(
     mut objects: Query<(Entity, &mut Transform), With<Sprite>>,
     window: Single<&Window, With<PrimaryWindow>>,
-    camera: Single<(&Camera, &GlobalTransform)>,
+    camera: Single<(&Camera, &GlobalTransform), With<WorldCamera>>,
     buttons: Res<ButtonInput<MouseButton>>,
     mut dragged: ResMut<Dragged>,
     mut gizmos: Gizmos,
